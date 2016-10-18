@@ -14,7 +14,7 @@ Sim800l Sim800l; //to declare the library
  */
 
 String textSms, numberSms;
-const String falbackNumber = "+4915140118278";
+const String falbackNumber = "";
 const int maxSMS = 5;
 String recNumber[maxSMS];
 
