@@ -14,6 +14,9 @@ Sim800l Sim800l; //to declare the library
  */
 
 String textSms, numberSms;
+const String falbackNumber = "+4915140118278";
+const int maxSMS = 5;
+String recNumber[maxSMS];
 
 uint8_t ArduinoLED = 13; // use what you need
 const uint8_t LEDGreen = 5; // LED an Pin 5
@@ -23,6 +26,7 @@ boolean blinkOn = true;
 int ledState = LOW;
 unsigned long previousMillis = 0;
 const int powerOffTime = 10000;
+boolean smsReceived = false;
 
 void setup() {
   // set the digital pin as output:
@@ -49,14 +53,34 @@ void setup() {
   SmsText += quali;
   SmsText += "\r\nBatterie level\r\n";
   SmsText += batt;
-  //Sim800l.sendSms("+4915140118278", SmsText.c_str() );
+
+  /* Das nummernarray durchlaufen und für reden Eintrag eine SMS versenden */
+  for(int i = 0; i<= maxSMS; i++){
+    if (recNumber[i] == ""){
+      if ( i == 0 ){
+        recNumber[i] = falbackNumber;
+        Sim800l.sendSms(recNumber[i].c_str(), SmsText.c_str() );
+      } else {
+        break;
+      }
+    } else {
+      Sim800l.sendSms(recNumber[i].c_str(), SmsText.c_str() );
+      delay(100);
+    }
+  }
+  
+  
   Serial.println("Ende");
+  delay(300);
+  Sim800l.delAllSms();
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
-  if (currentMillis - previousMillis >= 500 && blinkOn) {
+
+/* Blinken bei warten auf SMS */
+  if (currentMillis - previousMillis >= 500 && blinkOn && not smsReceived) {
 
     // save the last time you blinked the LED
     previousMillis = currentMillis;
@@ -69,9 +93,11 @@ void loop() {
     }
     digitalWrite(LEDGreen, ledState);
   }
-  
-  textSms = Sim800l.readSms(1); //read the first sms
 
+  if ( not smsReceived ){
+    textSms = Sim800l.readSms(1); //read the first sms
+  }
+  
   if (textSms.indexOf("OK") != -1) //first we need to know if the messege is correct. NOT an ERROR
   {
     if (textSms.length() > 7)  // optional you can avoid SMS empty
@@ -87,40 +113,64 @@ void loop() {
       
       int idx = 0;
       int plusPos=0;
-      String recNumber[5];
-      int stPlus = textSms.indexOf("\n",textSms.indexOf("\n") + 1);
+      int startPos = textSms.lastIndexOf('"');
+      int stPlus = startPos;
       int ndPlus = stPlus + 2;
       
       do{
         stPlus = textSms.indexOf("+", stPlus + 1);
         ndPlus = textSms.indexOf("+", stPlus + 2);
+
+        /* calidate Number */
+        for(int j = stPlus +1; j<= textSms.length(); j++){
+            if(isDigit(textSms.charAt(j))){
+              continue;
+            } else {
+              ndPlus = j; // Bei minus 1 wird er nicht geschrieben
+              break;
+            }
+        }
+        
         Serial.println("-------------------------");
         Serial.println(stPlus);
         Serial.println(ndPlus);
         Serial.println("-------------------------");
         
-        if (ndPlus != -1){
-           numberSms = textSms.substring(stPlus,ndPlus);
-        }
-        else if (stPlus != -1)
-        {
-          numberSms = textSms.substring(stPlus);
-        }
-        else {
-          break;
-        }
-        recNumber[idx] = numberSms;
+        /* Extrahiere die Nummer aus dem Text */
         
+        if (ndPlus == -1){
+          recNumber[idx] = textSms.substring(stPlus);      
+        } else {
+          recNumber[idx] = textSms.substring(stPlus,ndPlus);
+        }
+  
+      
         Serial.print("SMS ");
         Serial.print(idx);
         Serial.print(": ");
         Serial.println(recNumber[idx]);
+        smsReceived = true;
+        
+        if (ndPlus == -1){
+          break;
+        }
         
         idx ++;  
       } while(idx <= 5);
+
+      String SmsText = "Folgende Nummer(n) wurden eingetragen: \n\n";
+      for (int i = 0; i <= maxSMS; i++){
+        SmsText += recNumber[i];
+        SmsText += "\n";
+      }
+      textSms = "";
+      Sim800l.sendSms(numberSms.c_str(), SmsText.c_str() );
+        
     }
+    delay(200);
     Sim800l.delAllSms(); //do only if the message is not empty,in other case is not necesary
     //delete all sms..so when receive a new sms always will be in first position
+    
   }
 }
 
