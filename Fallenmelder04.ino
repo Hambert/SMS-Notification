@@ -2,6 +2,7 @@
 #include <SoftwareSerial.h> //is necesary for the Sim800l library!! 
 Sim800l Sim800l; //to declare the library
 
+#include <EEPROM.h>  // using the eeprom memory
 /*
         PINOUT:
           _____________________________
@@ -26,6 +27,7 @@ unsigned long previousMillis = 0;
 unsigned long prevAskSMS = 0;
 const int powerOffTime = 10000;
 boolean smsReceived = false;
+int eepromAddr = 0;
 
 void setup() {
   // set the digital pin as output:
@@ -52,7 +54,9 @@ void setup() {
   SmsText += quali;
   SmsText += "\r\nBatterie level\r\n";
   SmsText += batt;
-
+  /* Read sms numbers from EEPROM */
+  EEPROM.get(eepromAddr, recNumber);
+  
   /* Das nummernarray durchlaufen und für reden Eintrag eine SMS versenden */
   for (int i = 0; i <= maxSMS; i++) {
     if (recNumber[i] == "") {
@@ -80,7 +84,6 @@ void loop() {
     // save the last time you blinked the LED
     previousMillis = currentMillis;
 
-
     if (ledState == LOW) {
       ledState = HIGH;
     } else {
@@ -90,6 +93,18 @@ void loop() {
   }
   if (smsReceived){
     digitalWrite(LEDGreen,LOW);
+    delay(100);
+
+    if (Sim800l.PowerOff()) {
+      Serial.print("SIM 800l powered off");
+    }
+    EEPROM.put(eepromAddr, recNumber);
+
+    eepromAddr = eepromAddr + 1;
+    if (eepromAddr == EEPROM.length()) {
+      eepromAddr = 0;
+    }
+  
   }
 
   if ( not smsReceived && askSMS - prevAskSMS >= 1000) {
@@ -119,7 +134,10 @@ void loop() {
       do {
         stPlus = textSms.indexOf("+", stPlus + 1);
         ndPlus = textSms.indexOf("+", stPlus + 2);
-
+        if (stPlus == -1){
+          break;
+          // SMS enthält kein + an der richtigen stelle
+        }
         /* validate Number */
         int j = stPlus + 1;
         while ( isDigit(textSms.charAt(j)) ) {
@@ -147,14 +165,14 @@ void loop() {
         Serial.println(recNumber[idx]);
         smsReceived = true;
 
-        if ( textSms.charAt(ndPlus) == '\n' || textSms.charAt(ndPlus) == '\r'){
+        if ( textSms.charAt( ndPlus + 1 ) == '\n' || textSms.charAt( ndPlus + 1 ) == '\r'){
           break;
         }
 
         idx ++;
       } while (idx <= 5);
 
-      String SmsText = "Folgende Nummer(n) wurden eingetragen: \n\n";
+      String SmsText = "Folgende Nummer(n) wurden eingetragen:\n\n";
       for (int i = 0; i <= maxSMS; i++) {
         SmsText += recNumber[i];
         SmsText += "\n";
